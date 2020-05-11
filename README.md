@@ -90,12 +90,15 @@ python preprocess.py
 
 ```
 python main.py
+
+Notice:
+    Details of other arguments are in `main.py`.
 ```
 
 ### Convert
 
 ```
-python main.py --mode convert --src_speaker [src_speaker] --trg_speaker [trg_speaker_list] --test_iters [test_iters]
+python main.py --mode convert [--src_speaker src_speaker] [--trg_speaker trg_speaker_list] [--test_iters test_iters]
 
 src_speaker:
     Source of speaker (quotation marks are neccessary).
@@ -109,6 +112,9 @@ trg_speaker_list:
 
 e.g. Convert from speaker VCC2SM1 to speakers VCC2SM1 and VCC2SM1 at step 100000.
     python main.py --mode convert --src_speaker "VCC2SM1" --trg_speaker "['VCC2SM1', 'VCC2SM1']" --test_iters 100000
+    
+Notice:
+    Details of other arguments are in `main.py`.
 ```
 
 ## References

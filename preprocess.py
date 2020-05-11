@@ -9,18 +9,18 @@ from datetime import datetime
 
 FEATURE_DIM = 36
 SAMPLE_RATE = 16000
-FRAMES = 512
+FRAMES = 128
 FFTSIZE = 1024
 SPEAKERS_NUM = len(speakers)
-CHUNK_SIZE = 1 # concate CHUNK_SIZE audio clips together
+CHUNK_SIZE = 1
 EPSILON = 1e-10
 MODEL_NAME = 'stargan-vc2'
 
 def load_wavs(dataset: str, sr):
-    '''
-    data dict contains all audios file path &
-    resdict contains all wav files   
-    '''
+    """
+        `data`: contains all audios file path. 
+        `resdict`: contains all wav files.   
+    """
 
     data = {}
     with os.scandir(dataset) as it:
@@ -31,7 +31,7 @@ def load_wavs(dataset: str, sr):
                     for onefile in it_f:
                         if onefile.is_file():
                             data[entry.name].append(onefile.path)
-    print(f'Loaded keys: {data.keys()}')
+    print(f'* Loaded keys: {data.keys()}')
     resdict = {}
 
     cnt = 0
@@ -49,21 +49,27 @@ def load_wavs(dataset: str, sr):
             print('.', end='')
             cnt += 1
 
-    print(f'\nTotal audio files: {cnt}.')
+    print(f'\n* Total audio files: {cnt}.')
     return resdict
 
 def chunks(iterable, size):
-    """Yield successive n-sized chunks from iterable."""
+    """
+        Yield successive n-sized chunks from iterable.
+    """
+
     for i in range(0, len(iterable), size):
         yield iterable[i: i + size]
 
 def wav_to_mcep_file(dataset: str, sr=SAMPLE_RATE, processed_filepath: str='./data/processed'):
-    '''convert wavs to mcep feature using image repr'''
+    """
+        Convert wavs to mcep feature using image repr.
+    """
+
     shutil.rmtree(processed_filepath)
     os.makedirs(processed_filepath, exist_ok=True)
 
     allwavs_cnt = len(glob.glob(f'{dataset}/*/*.wav'))
-    print(f'Total audio files: {allwavs_cnt}.')
+    print(f'* Total audio files: {allwavs_cnt}.')
 
     d = load_wavs(dataset, sr)
     for one_speaker in d.keys():
@@ -81,7 +87,7 @@ def wav_to_mcep_file(dataset: str, sr=SAMPLE_RATE, processed_filepath: str='./da
             newname = f'{one_speaker}_{index}'
             file_path_z = os.path.join(processed_filepath, newname)
             np.savez(file_path_z, f0=f0, coded_sp=coded_sp)
-            print(f'Save: {file_path_z}')
+            print(f'[SAVE]: {file_path_z}')
 
             for start_idx in range(0, coded_sp.shape[1] - FRAMES + 1, FRAMES):
                 one_audio_seg = coded_sp[:, start_idx : start_idx+FRAMES]
@@ -90,7 +96,7 @@ def wav_to_mcep_file(dataset: str, sr=SAMPLE_RATE, processed_filepath: str='./da
                     temp_name = f'{newname}_{start_idx}'
                     filePath = os.path.join(processed_filepath, temp_name)
                     np.save(filePath, one_audio_seg)
-                    print(f'Save: {filePath}.npy')
+                    print(f'[SAVE]: {filePath}.npy')
             
 def world_features(wav, sr, fft_size, dim):
     f0, timeaxis = pw.harvest(wav, sr)
@@ -101,9 +107,10 @@ def world_features(wav, sr, fft_size, dim):
     return f0, timeaxis, sp, ap, coded_sp
 
 def cal_mcep(wav, sr=SAMPLE_RATE, dim=FEATURE_DIM, fft_size=FFTSIZE):
-    '''cal mcep given wav singnal
-        the frame_period used only for pad_wav_to_get_fixed_frames
-    '''
+    """
+        Calculate MCEPs given wav singnal.
+    """
+
     f0, timeaxis, sp, ap, coded_sp = world_features(wav, sr, fft_size, dim)
     coded_sp = coded_sp.T
 
@@ -126,11 +133,11 @@ if __name__ == "__main__":
 
     os.makedirs(output_dir, exist_ok=True)
     
-    wav_to_mcep_file(input_dir, SAMPLE_RATE,  processed_filepath=output_dir)
+    wav_to_mcep_file(input_dir, SAMPLE_RATE, processed_filepath=output_dir)
 
     generator = GenerateStatistics(output_dir)
     generator.generate_stats()
     generator.normalize_dataset()
     end = datetime.now()
     
-    print(f"Duration: {end-start}.")
+    print(f"* Duration: {end-start}.")

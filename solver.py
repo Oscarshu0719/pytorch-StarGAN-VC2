@@ -61,12 +61,13 @@ class Solver(object):
         self.lr_update_step = config.lr_update_step
 
         self.build_model()
-        if self.use_tensorboard:
+        # Only use tensorboard in train mode.
+        if self.use_tensorboard and config.mode == 'train':
             self.build_tensorboard()
     
     def build_model(self):
-        self.G = Generator()
-        self.D = Discriminator()
+        self.G = Generator(num_speakers=self.num_spk)
+        self.D = Discriminator(num_speakers=self.num_spk)
 
         self.g_optimizer = torch.optim.Adam(self.G.parameters(), self.g_lr, [self.beta1, self.beta2])
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
@@ -82,15 +83,17 @@ class Solver(object):
         for p in model.parameters():
             num_params += p.numel()
         print(model)
-        print(name)
-        print(f"Number of parameters: {num_params}")
+        print(f"* ({name}) Number of parameters: {num_params}.")
 
     def build_tensorboard(self):
         from logger import Logger
         self.logger = Logger(self.log_dir)
 
     def update_lr(self, g_lr, d_lr):
-        """Decay learning rates of the generator and discriminator and classifier."""
+        """
+            Decay learning rates of the generator and discriminator.
+        """
+
         for param_group in self.g_optimizer.param_groups:
             param_group['lr'] = g_lr
         for param_group in self.d_optimizer.param_groups:
@@ -110,18 +113,17 @@ class Solver(object):
         norm = Normalizer()
         data_iter = iter(self.data_loader)
 
-        g_adv_optim = 0            # init optimum g_adv
-        g_adv_converge_low = True  # check which direction g_adv is converging (init as low)
-        g_rec_optim = 0            # init optimum g_rec
-        g_rec_converge_low = True  # check which direction g_rec is converging (init as low)
-        g_tot_optim = 0            # converges around 37
-        g_tot_converge_low = True  # check which direction g_tot is converging (init as low)
+        g_adv_optim = 0            
+        g_adv_converge_low = True  # Check which direction `g_adv` is converging (init as low).
+        g_rec_optim = 0            
+        g_rec_converge_low = True  # Check which direction `g_rec` is converging (init as low).
+        g_tot_optim = 0            
+        g_tot_converge_low = True  # Check which direction `g_tot` is converging (init as low).
 
-        print('Start training......')
+        print('Start training...')
         start_time = datetime.now()
 
         for i in range(start_iters, self.num_iters):
-             # Fetch real images and labels.
             try:
                 x_real, speaker_idx_org, label_org = next(data_iter)
             except:
@@ -132,14 +134,14 @@ class Solver(object):
             label_trg = label_org[rand_idx]
             speaker_idx_trg = speaker_idx_org[rand_idx]
             
-            x_real = x_real.to(self.device)           # Input images.
-            label_org = label_org.to(self.device)     # Original domain one-hot labels.
-            label_trg = label_trg.to(self.device)     # Target domain one-hot labels.
+            x_real = x_real.to(self.device)           
+            label_org = label_org.to(self.device)             # Original domain one-hot labels.
+            label_trg = label_trg.to(self.device)             # Target domain one-hot labels.
             speaker_idx_org = speaker_idx_org.to(self.device) # Original domain labels.
             speaker_idx_trg = speaker_idx_trg.to(self.device) # Target domain labels.
 
             """
-            Discriminator training.
+                Discriminator training.
             """
             CELoss = nn.CrossEntropyLoss()
 
@@ -169,7 +171,7 @@ class Solver(object):
             loss['D/d_loss'] = d_loss.item()
 
             """
-            Generator training.
+                Generator training.
             """        
             if (i + 1) % self.n_critic == 0:
                 # Loss: st-adv (original-to-target).
@@ -206,6 +208,7 @@ class Solver(object):
                         g_rec_converge_low = False
                     if g_loss > g_tot_optim:
                         g_tot_converge_low = False
+
                     print('* CONVERGE DIRECTION')
                     print(f'adv_loss low: {g_adv_converge_low}')
                     print(f'g_rec_loss los: {g_rec_converge_low}')
@@ -260,7 +263,7 @@ class Solver(object):
             if (i + 1) % self.log_step == 0:
                 et = datetime.now() - start_time
                 et = str(et)[: -7]
-                log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+                log = "Elapsed [{}], Iteration [{}/{}]".format(et, i + 1, self.num_iters)
                 for tag, value in loss.items():
                     log += ", {}: {:.4f}".format(tag, value)
                 print(log)
@@ -297,7 +300,7 @@ class Solver(object):
                             convert_result.append(one_set_return)
 
                         convert_con = np.concatenate(convert_result, axis=1)
-                        convert_con = convert_con[:, 0:content['coded_sp_norm'].shape[1]]
+                        convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
                         contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
                         decoded_sp = decode_spectral_envelope(contigu, SAMPLE_RATE, fft_size=FFTSIZE)
                         f0_converted = norm.pitch_conversion(f0, speaker, target)
@@ -305,7 +308,7 @@ class Solver(object):
 
                         name = f'{speaker}-{target}_iter{i + 1}_{filename}'
                         path = os.path.join(self.sample_dir, name)
-                        print(f'[save]: {path}')
+                        print(f'[SAVE]: {path}')
                         librosa.output.write_wav(path, wav, SAMPLE_RATE)
                         
             # Save model checkpoints.
@@ -324,7 +327,11 @@ class Solver(object):
                 print (f'Decayed learning rates, g_lr: {g_lr}, d_lr: {d_lr}.')
 
     def gradient_penalty(self, y, x):
-        """Compute gradient penalty: (L2_norm(dy/dx) - 1) ** 2."""
+        """
+            Compute gradient penalty: (L2_norm(dy / dx) - 1) ** 2.
+            (Differs from the paper.)
+        """
+
         weight = torch.ones(y.size()).to(self.device)
         dydx = torch.autograd.grad(outputs=y,
                                    inputs=x,
@@ -338,7 +345,6 @@ class Solver(object):
         return torch.mean((dydx_l2norm - 1) ** 2)
 
     def reset_grad(self):
-        """Reset the gradient buffers."""
         self.g_optimizer.zero_grad()
         self.d_optimizer.zero_grad()
 
@@ -350,7 +356,6 @@ class Solver(object):
         print(f'Save {type_saving} optimal model checkpoints into {self.model_save_dir}...')
 
     def restore_model(self, resume_iters):
-        """Restore the trained generator and discriminator."""
         print(f'Loading the trained models from step {resume_iters}...')
         G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(resume_iters))
         D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
@@ -368,8 +373,11 @@ class Solver(object):
         sp_norm_pad = np.hstack((coded_sp_norm, np.zeros((coded_sp_norm.shape[0], pad_length))))
         return sp_norm_pad 
 
-    def test(self):
-        """Translate speech using StarGAN ."""
+    def convert(self):
+        """
+            Convertion.    
+        """
+
         self.restore_model(self.test_iters)
         norm = Normalizer()
 
@@ -383,7 +391,6 @@ class Solver(object):
             label_t = np.asarray([label_t])
             
             with torch.no_grad():
-
                 for filename, content in d.items():
                     f0 = content['f0']
                     ap = content['ap']
@@ -391,7 +398,7 @@ class Solver(object):
 
                     convert_result = []
                     for start_idx in range(0, sp_norm_pad.shape[1] - FRAMES + 1, FRAMES):
-                        one_seg = sp_norm_pad[:, start_idx: start_idx+FRAMES]
+                        one_seg = sp_norm_pad[:, start_idx: start_idx + FRAMES]
                         
                         one_seg = torch.FloatTensor(one_seg).to(self.device)
                         one_seg = one_seg.view(1, 1, one_seg.size(0), one_seg.size(1))
@@ -404,7 +411,7 @@ class Solver(object):
                         convert_result.append(one_set_return)
 
                     convert_con = np.concatenate(convert_result, axis=1)
-                    convert_con = convert_con[:, 0:content['coded_sp_norm'].shape[1]]
+                    convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
                     contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
                     decoded_sp = decode_spectral_envelope(contigu, SAMPLE_RATE, fft_size=FFTSIZE)
                     f0_converted = norm.pitch_conversion(f0, speaker, target)
@@ -412,5 +419,5 @@ class Solver(object):
 
                     name = f'{speaker}-{target}_iter{self.test_iters}_{filename}'
                     path = os.path.join(self.result_dir, name)
-                    print(f'Save: {path}')
+                    print(f'[SAVE]: {path}')
                     librosa.output.write_wav(path, wav, SAMPLE_RATE)            

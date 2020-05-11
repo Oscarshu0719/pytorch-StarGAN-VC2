@@ -28,8 +28,8 @@ def main(config):
     if config.mode == 'train':
         solver.train()
 
-    elif config.mode == 'test':
-        solver.test()
+    elif config.mode == 'convert':
+        solver.convert()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -40,10 +40,10 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_gp', type=float, default=5, help='Weight of gradient penalty.')
     parser.add_argument('--lambda_id', type=float, default=5, help='Weight of identity loss.')
     
-    parser.add_argument('--batch_size', type=int, default=4, help='Mini-batch size.')
-    parser.add_argument('--num_iters', type=int, default=1, help='Number of total iterations for training discriminator.')
+    parser.add_argument('--batch_size', type=int, default=8, help='Mini-batch size.')
+    parser.add_argument('--num_iters', type=int, default=100000, help='Number of total iterations for training discriminator.')
     parser.add_argument('--num_iters_decay', type=int, default=100000, help='Number of iterations for decaying learning rate.')
-    parser.add_argument('--g_lr', type=float, default=0.0001, help='Learning rate of generator.')
+    parser.add_argument('--g_lr', type=float, default=0.0002, help='Learning rate of generator.')
     parser.add_argument('--d_lr', type=float, default=0.0001, help='Learning rate of discriminator.')
     parser.add_argument('--n_critic', type=int, default=5, help='Number of epochs discriminator update for one generator update.')
     parser.add_argument('--beta1', type=float, default=0.5, help='Beta1 for Adam optimizer.')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--trg_speaker', type=str, default="['TM1', 'SF1']", help='String list representation of target speakers eg. "[a,b]".')
 
     parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+    parser.add_argument('--mode', type=str, default='train', choices=['train', 'convert'])
     parser.add_argument('--use_tensorboard', type=str2bool, default=True)
 
     parser.add_argument('--data_dir', type=str, default='data/processed')

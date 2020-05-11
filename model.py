@@ -62,7 +62,10 @@ class UpSampleBlock(nn.Module):
         return self.conv_layer(x) * torch.sigmoid(self.conv_gated(x))
 
 class ConditionalInstanceNormalisation(nn.Module):
-    """CIN Block."""
+    """
+        CIN block.
+    """
+
     def __init__(self, dim_in, style_num):
         super(ConditionalInstanceNormalisation, self).__init__()
 
@@ -261,9 +264,8 @@ class Generator(nn.Module):
 
         x = self.up_sample_1(x)
         x = self.up_sample_2(x)
-
+        
         out = self.out(x)
-
         return out
 
 class Discriminator(nn.Module):
@@ -317,7 +319,6 @@ class Discriminator(nn.Module):
 
     def forward(self, x, c, c_):
         c_onehot = torch.cat((c, c_), dim=1).to(self.device)
-
         x = self.conv_layer_1(x) * torch.sigmoid(self.conv_gated_1(x))
 
         x = self.down_sample_1(x)

@@ -8,7 +8,6 @@ from utility import *
 from datetime import datetime
 
 FEATURE_DIM = 36
-SAMPLE_RATE = 16000
 FRAMES = 128
 FFTSIZE = 1024
 SPEAKERS_NUM = len(speakers)
@@ -60,7 +59,7 @@ def chunks(iterable, size):
     for i in range(0, len(iterable), size):
         yield iterable[i: i + size]
 
-def wav_to_mcep_file(dataset: str, sr=SAMPLE_RATE, processed_filepath: str='./data/processed'):
+def wav_to_mcep_file(dataset: str, sr: int, processed_filepath: str='./data/processed'):
     """
         Convert wavs to mcep feature using image repr.
     """
@@ -75,7 +74,7 @@ def wav_to_mcep_file(dataset: str, sr=SAMPLE_RATE, processed_filepath: str='./da
     for one_speaker in d.keys():
         values_of_one_speaker = list(d[one_speaker].values())
        
-        for index, one_chunk in enumerate (chunks(values_of_one_speaker, CHUNK_SIZE)):
+        for index, one_chunk in enumerate(chunks(values_of_one_speaker, CHUNK_SIZE)):
             wav_concated = [] 
             temp = one_chunk.copy()
 
@@ -106,7 +105,7 @@ def world_features(wav, sr, fft_size, dim):
 
     return f0, timeaxis, sp, ap, coded_sp
 
-def cal_mcep(wav, sr=SAMPLE_RATE, dim=FEATURE_DIM, fft_size=FFTSIZE):
+def cal_mcep(wav, sr, dim=FEATURE_DIM, fft_size=FFTSIZE):
     """
         Calculate MCEPs given wav singnal.
     """
@@ -123,7 +122,11 @@ if __name__ == "__main__":
     
     input_dir = './data/spk'
     output_dir = './data/processed'
-   
+
+    dataset_default = 'VCC2016'
+
+    parser.add_argument('--dataset', type=str, default=dataset_default, choices=['VCC2016', 'VCC2018'], 
+        help='Available datasets: VCC2016 and VCC2018 (Default: VCC2016).')
     parser.add_argument('--input_dir', type=str, default=input_dir, help='Directory of input data.')
     parser.add_argument('--output_dir', type=str, default=output_dir, help='Directory of processed data.')
     
@@ -132,8 +135,18 @@ if __name__ == "__main__":
     output_dir = argv.output_dir
 
     os.makedirs(output_dir, exist_ok=True)
-    
-    wav_to_mcep_file(input_dir, SAMPLE_RATE, processed_filepath=output_dir)
+
+    """
+        Sample rate:
+            VCC2016: 16000 Hz
+            VCC2018: 22050 Hz
+    """
+    if argv.dataset == 'VCC2016':
+        sample_rate = 16000
+    else:
+        sample_rate = 22050
+
+    wav_to_mcep_file(input_dir, sample_rate, processed_filepath=output_dir)
 
     generator = GenerateStatistics(output_dir)
     generator.generate_stats()

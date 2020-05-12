@@ -33,8 +33,20 @@ Support [VCC2016](http://www.vc-challenge.org/vcc2016/index.html) and [VCC2018](
 
 #### Download the vcc 2016 dataset to `./data`.
 
-``` bash
-python download.py 
+``` 
+python download.py [--dataset dataset]
+
+dataset: 
+    Downloaded dataset. 
+    Available datasets: VCC2016, VCC2018.
+    e.g. Download dataset VCC2016.
+        VCC2016
+
+e.g. Download dataset VCC2016.
+    python download.py --dataset VCC2016.
+
+Notice:
+    Details of other arguments are in `download.py`.
 ```
 
 #### Move the corresponding speakers to the training and testing directories.
@@ -43,9 +55,11 @@ python download.py
 bash move_data.sh [dataset] [speakers_list]
 
 dataset:
-    VCC2016 or VCC2018 (case insensitive).
-    e.g. Use VCC2016 dataset.
+    Used dataset. 
+    Available datasets: VCC2016, VCC2018 (case insensitive).
+    e.g. Use dataset VCC2016.
         VCC2016
+
 speakers_list
     List of training and testing speakers.
     e.g. Train and test four speakers SF1, SF2, TM1, and TM2.
@@ -83,13 +97,37 @@ data
 Extract WORLD features (mcep, f0, ap) from each speech clip.
 
 ```
-python preprocess.py
+python [-W ignore] preprocess.py [--dataset dataset]
+
+-W ignore:
+    Ignore warnings.
+
+dataset:
+    Used dataset. Main reason is to determine sample rate.
+    Available datasets: VCC2016, VCC2018.
+    e.g. Use dataset VCC2016.
+        VCC2016
+
+e.g. Use dataset VCC2016 and ignore warnings.
+    python -W ignore preprocess.py --dataset VCC2016
+
+Notice:
+    Details of other arguments are in `preprocess.py`.
 ```
 
 ### Train
 
 ```
-python main.py
+python main.py [--dataset dataset]
+
+dataset:
+    Used dataset. Main reason is to determine sample rate.
+    Available datasets: VCC2016, VCC2018.
+    e.g. Use dataset VCC2016.
+        VCC2016
+
+e.g. Use dataset VCC2016 and train.
+    python main.py --dataset VCC2016
 
 Notice:
     Details of other arguments are in `main.py`.
@@ -98,7 +136,7 @@ Notice:
 ### Convert
 
 ```
-python main.py --mode convert [--src_speaker src_speaker] [--trg_speaker trg_speaker_list] [--test_iters test_iters]
+python main.py --mode convert [--src_speaker src_speaker] [--trg_speaker trg_speaker_list] [--test_iters test_iters] [--dataset dataset]
 
 src_speaker:
     Source of speaker (quotation marks are neccessary).
@@ -110,8 +148,14 @@ trg_speaker_list:
     e.g. Target speakers are VCC2SM1 and VCC2SF1.
         "['VCC2SM1', 'VCC2SF1']"
 
-e.g. Convert from speaker VCC2SM1 to speakers VCC2SM1 and VCC2SM1 at step 100000.
-    python main.py --mode convert --src_speaker "VCC2SM1" --trg_speaker "['VCC2SM1', 'VCC2SM1']" --test_iters 100000
+dataset:
+    Used dataset. Main reason is to determine sample rate.
+    Available datasets: VCC2016, VCC2018.
+    e.g. Use dataset VCC2016.
+        VCC2016
+
+e.g. Convert from speaker VCC2SM1 to speakers VCC2SM1 and VCC2SM1 at step 100000 using sample rate of VCC2016.
+    python main.py --mode convert --src_speaker "VCC2SM1" --trg_speaker "['VCC2SM1', 'VCC2SM1']" --test_iters 100000 --dataset VCC2016
     
 Notice:
     Details of other arguments are in `main.py`.

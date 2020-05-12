@@ -58,7 +58,8 @@ if __name__ == '__main__':
     train_dir = './data/spk'
     test_dir = './data/spk_test'
 
-    parser.add_argument('--dataset', type=str, default=dataset_default, choices=['VCC2016', 'VCC2018'], help='Available datasets: VCC2016 and VCC2018.')
+    parser.add_argument('--dataset', type=str, default=dataset_default, choices=['VCC2016', 'VCC2018'], 
+        help='Available datasets: VCC2016 and VCC2018 (Default: VCC2018).')
     parser.add_argument('--train_dir', type=str, default=train_dir, help='Directory of train set.')
     parser.add_argument('--test_dir', type=str, default=test_dir, help='Directory of test set.')
 

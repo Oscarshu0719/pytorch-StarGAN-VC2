@@ -8,7 +8,7 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
-from preprocess import (FEATURE_DIM, FFTSIZE, FRAMES, SAMPLE_RATE,
+from preprocess import (FEATURE_DIM, FFTSIZE, FRAMES,
                         world_features)
 from utility import Normalizer, speakers
 from random import choice
@@ -43,10 +43,11 @@ def data_loader(data_dir: str, batch_size=4, shuffle=True, mode='train', num_wor
     return loader
 
 class TestSet(object):
-    def __init__(self, data_dir: str):
+    def __init__(self, data_dir: str, sr: int):
         super(TestSet, self).__init__()
         self.data_dir = data_dir
         self.norm = Normalizer()
+        self.sample_rate = sr
         
     def choose(self):
         r = choice(speakers)
@@ -64,8 +65,8 @@ class TestSet(object):
         res = {}
         for f in wavfiles:
             filename = os.path.basename(f)
-            wav, _ = librosa.load(f, sr=SAMPLE_RATE, dtype=np.float64)
-            f0, timeaxis, sp, ap, coded_sp = world_features(wav, SAMPLE_RATE, FFTSIZE, FEATURE_DIM)
+            wav, _ = librosa.load(f, sr=self.sample_rate, dtype=np.float64)
+            f0, timeaxis, sp, ap, coded_sp = world_features(wav, self.sample_rate, FFTSIZE, FEATURE_DIM)
             coded_sp_norm = self.norm.forward_process(coded_sp.T, r_s)
 
             if not res.__contains__(filename):

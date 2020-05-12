@@ -15,7 +15,7 @@ from torchvision.utils import save_image
 
 from data_loader import TestSet
 from model import Discriminator, Generator
-from preprocess import FRAMES, SAMPLE_RATE, FFTSIZE
+from preprocess import FRAMES, FFTSIZE
 from utility import Normalizer, speakers
 
 class Solver(object):
@@ -23,6 +23,11 @@ class Solver(object):
         self.config = config
         self.data_loader = data_loader
         self.num_spk = config.num_spk
+
+        if config.dataset == 'VCC2016':
+            self.sample_rate = 16000
+        else:
+            self.sample_rate = 22050
        
         self.lambda_cyc = config.lambda_cyc
         self.lambda_gp = config.lambda_gp
@@ -275,7 +280,7 @@ class Solver(object):
             # Translate fixed images for debugging.
             if (i + 1) % self.sample_step == 0:
                 with torch.no_grad():
-                    d, speaker = TestSet(self.test_dir).test_data()
+                    d, speaker = TestSet(self.test_dir, self.sample_rate).test_data()
                     target = random.choice([x for x in speakers if x != speaker])
                     label_t = self.spk_enc.transform([target])[0]
                     label_t = np.asarray([label_t])
@@ -302,14 +307,14 @@ class Solver(object):
                         convert_con = np.concatenate(convert_result, axis=1)
                         convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
                         contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
-                        decoded_sp = decode_spectral_envelope(contigu, SAMPLE_RATE, fft_size=FFTSIZE)
+                        decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
                         f0_converted = norm.pitch_conversion(f0, speaker, target)
-                        wav = synthesize(f0_converted, decoded_sp, ap, SAMPLE_RATE)
+                        wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
 
                         name = f'{speaker}-{target}_iter{i + 1}_{filename}'
                         path = os.path.join(self.sample_dir, name)
                         print(f'[SAVE]: {path}')
-                        librosa.output.write_wav(path, wav, SAMPLE_RATE)
+                        librosa.output.write_wav(path, wav, self.sample_rate)
                         
             # Save model checkpoints.
             if (i + 1) % self.model_save_step == 0:
@@ -381,7 +386,7 @@ class Solver(object):
         self.restore_model(self.test_iters)
         norm = Normalizer()
 
-        d, speaker = TestSet(self.test_dir).test_data(self.src_speaker)
+        d, speaker = TestSet(self.test_dir, self.sample_rate).test_data(self.src_speaker)
         targets = self.trg_speaker
        
         for target in targets:
@@ -413,11 +418,11 @@ class Solver(object):
                     convert_con = np.concatenate(convert_result, axis=1)
                     convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
                     contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
-                    decoded_sp = decode_spectral_envelope(contigu, SAMPLE_RATE, fft_size=FFTSIZE)
+                    decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
                     f0_converted = norm.pitch_conversion(f0, speaker, target)
-                    wav = synthesize(f0_converted, decoded_sp, ap, SAMPLE_RATE)
+                    wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
 
                     name = f'{speaker}-{target}_iter{self.test_iters}_{filename}'
                     path = os.path.join(self.result_dir, name)
                     print(f'[SAVE]: {path}')
-                    librosa.output.write_wav(path, wav, SAMPLE_RATE)            
+                    librosa.output.write_wav(path, wav, self.sample_rate)            

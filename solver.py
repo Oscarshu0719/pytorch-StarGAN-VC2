@@ -15,7 +15,7 @@ from torchvision.utils import save_image
 
 from data_loader import TestSet
 from model import Discriminator, Generator
-from preprocess import FRAMES, FFTSIZE
+from preprocess import FRAMES, FFTSIZE, SHIFTMS
 from utility import Normalizer, speakers
 
 class Solver(object):
@@ -125,7 +125,7 @@ class Solver(object):
         g_tot_optim = 0            
         g_tot_converge_low = True  # Check which direction `g_tot` is converging (init as low).
 
-        print('Start training...')
+        print('\n* Start training...\n')
         start_time = datetime.now()
 
         for i in range(start_iters, self.num_iters):
@@ -152,12 +152,13 @@ class Solver(object):
 
             # Loss: st-adv.
             out_r = self.D(x_real, label_org, label_trg)
-            x_fake = self.G(x_real, label_trg)
+            x_fake = self.G(x_real, label_org, label_trg)
             out_f = self.D(x_fake.detach(), label_org, label_trg)
             d_loss_adv = F.binary_cross_entropy_with_logits(input=out_f, target=torch.zeros_like(out_f, dtype=torch.float)) + \
                 F.binary_cross_entropy_with_logits(input=out_r, target=torch.ones_like(out_r, dtype=torch.float))
            
             # Loss: gp.
+            print(f'x_real: {x_real.shape}')
             alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
             x_hat = (alpha * x_real.data + (1 - alpha) * x_fake.data).requires_grad_(True)
             out_src = self.D(x_hat, label_org, label_trg)
@@ -180,16 +181,16 @@ class Solver(object):
             """        
             if (i + 1) % self.n_critic == 0:
                 # Loss: st-adv (original-to-target).
-                x_fake = self.G(x_real, label_trg)
+                x_fake = self.G(x_real, label_org, label_trg)
                 g_out_src = self.D(x_fake, label_org, label_trg)
                 g_loss_adv = F.binary_cross_entropy_with_logits(input=g_out_src, target=torch.ones_like(g_out_src, dtype=torch.float))
                 
                 # Loss: cyc (target-to-original).
-                x_rec = self.G(x_fake, label_org)
+                x_rec = self.G(x_fake, label_trg, label_org)
                 g_loss_rec = F.l1_loss(x_rec, x_real)
 
                 # Loss: id (original-to-original).
-                x_fake_id = self.G(x_real, label_org)
+                x_fake_id = self.G(x_real, label_org, label_org)
                 g_loss_id = F.l1_loss(x_fake_id, x_real)
 
                 # Total loss: st-adv + lambda_cyc * cyc (+ lambda_id * id).
@@ -281,7 +282,10 @@ class Solver(object):
             if (i + 1) % self.sample_step == 0:
                 with torch.no_grad():
                     d, speaker = TestSet(self.test_dir, self.sample_rate).test_data()
+                    original = random.choice([x for x in speakers if x != speaker])
                     target = random.choice([x for x in speakers if x != speaker])
+                    label_o = self.spk_enc.transform([original])[0]
+                    label_o = np.asarray([label_o])
                     label_t = self.spk_enc.transform([target])[0]
                     label_t = np.asarray([label_t])
 
@@ -295,11 +299,13 @@ class Solver(object):
                             one_seg = sp_norm_pad[:, start_idx: start_idx + FRAMES]
                             
                             one_seg = torch.FloatTensor(one_seg).to(self.device)
-                            one_seg = one_seg.view(1,1,one_seg.size(0), one_seg.size(1))
-                            l = torch.FloatTensor(label_t)
+                            one_seg = one_seg.view(1, 1, one_seg.size(0), one_seg.size(1))
+                            o = torch.FloatTensor(label_o)
+                            t = torch.FloatTensor(label_t)
                             one_seg = one_seg.to(self.device)
-                            l = l.to(self.device)
-                            one_set_return = self.G(one_seg, l).data.cpu().numpy()
+                            o = o.to(self.device)
+                            t = t.to(self.device)
+                            one_set_return = self.G(one_seg, o, t).data.cpu().numpy()
                             one_set_return = np.squeeze(one_set_return)
                             one_set_return = norm.backward_process(one_set_return, target)
                             convert_result.append(one_set_return)
@@ -309,7 +315,7 @@ class Solver(object):
                         contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
                         decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
                         f0_converted = norm.pitch_conversion(f0, speaker, target)
-                        wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
+                        wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate, frame_period=SHIFTMS)
 
                         name = f'{speaker}-{target}_iter{i + 1}_{filename}'
                         path = os.path.join(self.sample_dir, name)
@@ -371,7 +377,7 @@ class Solver(object):
     def pad_coded_sp(coded_sp_norm):
         f_len = coded_sp_norm.shape[1]
         if  f_len >= FRAMES: 
-            pad_length = FRAMES-(f_len - (f_len//FRAMES) * FRAMES)
+            pad_length = FRAMES - (f_len - (f_len//FRAMES) * FRAMES)
         elif f_len < FRAMES:
             pad_length = FRAMES - f_len
 
@@ -390,8 +396,10 @@ class Solver(object):
         targets = self.trg_speaker
        
         for target in targets:
-            print(target)
+            print(f'* Target: {target}')
             assert target in speakers
+            label_o = self.spk_enc.transform([self.src_speaker])[0]
+            label_o = np.asarray([label_o])
             label_t = self.spk_enc.transform([target])[0]
             label_t = np.asarray([label_t])
             
@@ -407,20 +415,21 @@ class Solver(object):
                         
                         one_seg = torch.FloatTensor(one_seg).to(self.device)
                         one_seg = one_seg.view(1, 1, one_seg.size(0), one_seg.size(1))
-                        l = torch.FloatTensor(label_t)
+                        o = torch.FloatTensor(label_o)
+                        t = torch.FloatTensor(label_t)
                         one_seg = one_seg.to(self.device)
-                        l = l.to(self.device)
-                        one_set_return = self.G(one_seg, l).data.cpu().numpy()
+                        o = o.to(self.device)
+                        t = t.to(self.device)
+                        one_set_return = self.G(one_seg, o, t).data.cpu().numpy()
                         one_set_return = np.squeeze(one_set_return)
                         one_set_return = norm.backward_process(one_set_return, target)
                         convert_result.append(one_set_return)
-
                     convert_con = np.concatenate(convert_result, axis=1)
                     convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
                     contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
                     decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
                     f0_converted = norm.pitch_conversion(f0, speaker, target)
-                    wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
+                    wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate, frame_period=SHIFTMS)
 
                     name = f'{speaker}-{target}_iter{self.test_iters}_{filename}'
                     path = os.path.join(self.result_dir, name)

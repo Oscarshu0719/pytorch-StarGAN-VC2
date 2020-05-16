@@ -151,7 +151,7 @@ class GenerateStatistics(object):
             log_f0s_mean=log_f0s_mean, log_f0s_std=log_f0s_std,
             coded_sps_mean=coded_sps_mean, coded_sps_std=coded_sps_std)
 
-            print(f'Save: {filename}')
+            print(f'[SAVE]: {filename}')
   
     def normalize_dataset(self):
         '''normalize dataset run once!'''
@@ -165,4 +165,4 @@ class GenerateStatistics(object):
             mcep_normed = norm.forward_process(mcep, speaker)
             os.remove(p)
             np.save(p, mcep_normed)
-            print(f'Normalize: {p}')
+            print(f'[NORM]: {p}')

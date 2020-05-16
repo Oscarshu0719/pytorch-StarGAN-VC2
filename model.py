@@ -156,55 +156,55 @@ class Generator(nn.Module):
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_2 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_3 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_4 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_5 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_6 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_7 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_8 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
         self.residual_9 = ResidualBlock(dim_in=256,
                                         dim_out=512,
                                         kernel_size=5,
                                         stride=1,
                                         padding=2,
-                                        style_num=self.num_speakers)
+                                        style_num=self.num_speakers * 2)
 
         # Up-conversion layers.
         self.up_conversion = nn.Conv1d(in_channels=256,
@@ -231,14 +231,22 @@ class Generator(nn.Module):
                                          bias=False)
 
         # TODO: The last layer differs from the paper.
-        self.out = nn.Conv2d(in_channels=64,
-                             out_channels=1, # 35 in paper
-                             kernel_size=(5, 15),
-                             stride=(1, 1),
-                             padding=(2, 7),
-                             bias=False)
+        self.conv_1 = nn.Conv2d(in_channels=64,
+                                out_channels=1, # 35 in paper
+                                kernel_size=(5, 15),
+                                stride=(1, 1),
+                                padding=(2, 7),
+                                bias=False)
+        
+        self.conv_2 = nn.Conv2d(in_channels=64,
+                                out_channels=1,
+                                kernel_size=(3, 3),
+                                stride=(1, 1),
+                                padding=1,
+                                bias=False)
 
-    def forward(self, x, c_):
+    def forward(self, x, c, c_):
+        c_onehot = torch.cat((c, c_), dim=1).to(self.device)
         width_size = x.size(3)
 
         x = self.conv_layer_1(x)
@@ -249,15 +257,15 @@ class Generator(nn.Module):
         x = x.contiguous().view(-1, 2304, width_size // 4)
         x = self.down_conversion(x)
 
-        x = self.residual_1(x, c_)
-        x = self.residual_2(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
-        x = self.residual_1(x, c_)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_2(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
+        x = self.residual_1(x, c_onehot)
 
         x = self.up_conversion(x)
         x = x.view(-1, 256, 9, width_size // 4)
@@ -265,8 +273,11 @@ class Generator(nn.Module):
         x = self.up_sample_1(x)
         x = self.up_sample_2(x)
         
-        out = self.out(x)
-        return out
+        x = self.conv_1(x)
+        outputs_reshaped = x[:, :, : -1, :]
+        print(outputs_reshaped.shape)
+
+        return outputs_reshaped
 
 class Discriminator(nn.Module):
     def __init__(self, num_speakers=4):

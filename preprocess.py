@@ -7,12 +7,13 @@ import pyworld as pw
 from utility import *
 from datetime import datetime
 
-FEATURE_DIM = 36
+FEATURE_DIM = 34
 FRAMES = 128
 FFTSIZE = 1024
 SPEAKERS_NUM = len(speakers)
 CHUNK_SIZE = 1
 EPSILON = 1e-10
+SHIFTMS = 5.0
 MODEL_NAME = 'stargan-vc2'
 
 def load_wavs(dataset: str, sr):
@@ -82,35 +83,35 @@ def wav_to_mcep_file(dataset: str, sr: int, processed_filepath: str='./data/proc
                 wav_concated.extend(one)
             wav_concated = np.array(wav_concated)
 
-            f0, ap, sp, coded_sp = cal_mcep(wav_concated, sr=sr, dim=FEATURE_DIM)
+            f0, ap, sp, coded_sp = cal_mcep(wav_concated, sr=sr, dim=FEATURE_DIM, shiftms=SHIFTMS)
             newname = f'{one_speaker}_{index}'
             file_path_z = os.path.join(processed_filepath, newname)
-            np.savez(file_path_z, f0=f0, coded_sp=coded_sp)
+            # np.savez(file_path_z, f0=f0, coded_sp=coded_sp)
             print(f'[SAVE]: {file_path_z}')
 
             for start_idx in range(0, coded_sp.shape[1] - FRAMES + 1, FRAMES):
-                one_audio_seg = coded_sp[:, start_idx : start_idx+FRAMES]
+                one_audio_seg = coded_sp[:, start_idx: start_idx + FRAMES]
 
                 if one_audio_seg.shape[1] == FRAMES:
                     temp_name = f'{newname}_{start_idx}'
                     filePath = os.path.join(processed_filepath, temp_name)
-                    np.save(filePath, one_audio_seg)
+                    # np.save(filePath, one_audio_seg)
                     print(f'[SAVE]: {filePath}.npy')
             
-def world_features(wav, sr, fft_size, dim):
-    f0, timeaxis = pw.harvest(wav, sr)
-    sp = pw.cheaptrick(wav, f0, timeaxis, sr,fft_size=fft_size)
+def world_features(wav, sr, fft_size, dim, shiftms):
+    f0, timeaxis = pw.harvest(wav, sr, frame_period=shiftms)
+    sp = pw.cheaptrick(wav, f0, timeaxis, sr, fft_size=fft_size)
     ap = pw.d4c(wav, f0, timeaxis, sr, fft_size=fft_size)
     coded_sp = pw.code_spectral_envelope(sp, sr, dim)
 
     return f0, timeaxis, sp, ap, coded_sp
 
-def cal_mcep(wav, sr, dim=FEATURE_DIM, fft_size=FFTSIZE):
+def cal_mcep(wav, sr, dim=FEATURE_DIM, fft_size=FFTSIZE, shiftms=SHIFTMS):
     """
         Calculate MCEPs given wav singnal.
     """
 
-    f0, timeaxis, sp, ap, coded_sp = world_features(wav, sr, fft_size, dim)
+    f0, timeaxis, sp, ap, coded_sp = world_features(wav, sr, fft_size, dim, shiftms)
     coded_sp = coded_sp.T
 
     return f0, ap, sp, coded_sp

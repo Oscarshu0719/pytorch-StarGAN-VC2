@@ -2,15 +2,13 @@ import glob
 import librosa
 import numpy as np
 import os
-
 from sklearn.preprocessing import LabelBinarizer
 import torch
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
-from preprocess import (FEATURE_DIM, FFTSIZE, FRAMES,
-                        world_features)
-from utility import Normalizer, speakers
+from preprocess import ALPHA, FEATURE_DIM, FFTSIZE, FRAMES, SHIFTMS
+from utility import Normalizer, speakers, cal_mcep
 from random import choice
 
 class AudioDataset(Dataset):
@@ -66,12 +64,12 @@ class TestSet(object):
         for f in wavfiles:
             filename = os.path.basename(f)
             wav, _ = librosa.load(f, sr=self.sample_rate, dtype=np.float64)
-            f0, timeaxis, sp, ap, coded_sp = world_features(wav, self.sample_rate, FFTSIZE, FEATURE_DIM)
-            coded_sp_norm = self.norm.forward_process(coded_sp.T, r_s)
+            f0, ap, mcep = cal_mcep(wav, self.sample_rate, FEATURE_DIM, FFTSIZE, SHIFTMS, ALPHA)
+            mcep_norm = self.norm.forward_process(mcep, r_s)
 
             if not res.__contains__(filename):
                 res[filename] = {}
-            res[filename]['coded_sp_norm'] = np.asarray(coded_sp_norm)
+            res[filename]['mcep_norm'] = np.asarray(mcep_norm)
             res[filename]['f0'] = np.asarray(f0)
             res[filename]['ap'] = np.asarray(ap)
         return res, r_s    

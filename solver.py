@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 import librosa
 import numpy as np
 import os
-from pyworld import decode_spectral_envelope, synthesize
 import random
 from sklearn.preprocessing import LabelBinarizer
 import time
@@ -15,8 +14,8 @@ from torchvision.utils import save_image
 
 from data_loader import TestSet
 from model import Discriminator, Generator
-from preprocess import FRAMES, FFTSIZE
-from utility import Normalizer, speakers
+from preprocess import ALPHA, FRAMES, FFTSIZE, SHIFTMS
+from utility import Normalizer, speakers, pad_mcep, synthesis_from_mcep
 
 class Solver(object):
     def __init__(self, data_loader, config):
@@ -125,7 +124,7 @@ class Solver(object):
         g_tot_optim = 0            
         g_tot_converge_low = True  # Check which direction `g_tot` is converging (init as low).
 
-        print('Start training...')
+        print('\n* Start training...\n')
         start_time = datetime.now()
 
         for i in range(start_iters, self.num_iters):
@@ -133,7 +132,7 @@ class Solver(object):
                 x_real, speaker_idx_org, label_org = next(data_iter)
             except:
                 data_iter = iter(self.data_loader)
-                x_real, speaker_idx_org, label_org = next(data_iter)           
+                x_real, speaker_idx_org, label_org = next(data_iter)    
 
             rand_idx = torch.randperm(label_org.size(0))
             label_trg = label_org[rand_idx]
@@ -152,9 +151,9 @@ class Solver(object):
 
             # Loss: st-adv.
             out_r = self.D(x_real, label_org, label_trg)
-            x_fake = self.G(x_real, label_trg)
+            x_fake = self.G(x_real, label_org, label_trg)
             out_f = self.D(x_fake.detach(), label_org, label_trg)
-            d_loss_adv = F.binary_cross_entropy_with_logits(input=out_f, target=torch.zeros_like(out_f, dtype=torch.float)) + \
+            d_loss_adv = F.binary_cross_entropy_with_logits(input=out_f, target=torch.ones_like(out_f, dtype=torch.float)) + \
                 F.binary_cross_entropy_with_logits(input=out_r, target=torch.ones_like(out_r, dtype=torch.float))
            
             # Loss: gp.
@@ -172,7 +171,7 @@ class Solver(object):
 
             loss = {}
             loss['D/d_loss_adv'] = d_loss_adv.item()
-            loss['D/d_gp'] = d_loss_gp.item()
+            loss['D/d_loss_gp'] = d_loss_gp.item()
             loss['D/d_loss'] = d_loss.item()
 
             """
@@ -180,16 +179,16 @@ class Solver(object):
             """        
             if (i + 1) % self.n_critic == 0:
                 # Loss: st-adv (original-to-target).
-                x_fake = self.G(x_real, label_trg)
+                x_fake = self.G(x_real, label_org, label_trg)
                 g_out_src = self.D(x_fake, label_org, label_trg)
                 g_loss_adv = F.binary_cross_entropy_with_logits(input=g_out_src, target=torch.ones_like(g_out_src, dtype=torch.float))
                 
                 # Loss: cyc (target-to-original).
-                x_rec = self.G(x_fake, label_org)
+                x_rec = self.G(x_fake, label_trg, label_org)
                 g_loss_rec = F.l1_loss(x_rec, x_real)
 
                 # Loss: id (original-to-original).
-                x_fake_id = self.G(x_real, label_org)
+                x_fake_id = self.G(x_real, label_org, label_org)
                 g_loss_id = F.l1_loss(x_fake_id, x_real)
 
                 # Total loss: st-adv + lambda_cyc * cyc (+ lambda_id * id).
@@ -281,35 +280,39 @@ class Solver(object):
             if (i + 1) % self.sample_step == 0:
                 with torch.no_grad():
                     d, speaker = TestSet(self.test_dir, self.sample_rate).test_data()
+                    original = random.choice([x for x in speakers if x != speaker])
                     target = random.choice([x for x in speakers if x != speaker])
+                    label_o = self.spk_enc.transform([original])[0]
                     label_t = self.spk_enc.transform([target])[0]
+                    label_o = np.asarray([label_o])
                     label_t = np.asarray([label_t])
 
                     for filename, content in d.items():
                         f0 = content['f0']
                         ap = content['ap']
-                        sp_norm_pad = self.pad_coded_sp(content['coded_sp_norm'])
+                        mcep_norm_pad = pad_mcep(content['mcep_norm'], FRAMES)
                         
                         convert_result = []
-                        for start_idx in range(0, sp_norm_pad.shape[1] - FRAMES + 1, FRAMES):
-                            one_seg = sp_norm_pad[:, start_idx: start_idx + FRAMES]
+                        for start_idx in range(0, mcep_norm_pad.shape[1] - FRAMES + 1, FRAMES):
+                            one_seg = mcep_norm_pad[:, start_idx: start_idx + FRAMES]
                             
                             one_seg = torch.FloatTensor(one_seg).to(self.device)
-                            one_seg = one_seg.view(1,1,one_seg.size(0), one_seg.size(1))
-                            l = torch.FloatTensor(label_t)
+                            one_seg = one_seg.view(1, 1, one_seg.size(0), one_seg.size(1))
+                            o = torch.FloatTensor(label_o)
+                            t = torch.FloatTensor(label_t)
                             one_seg = one_seg.to(self.device)
-                            l = l.to(self.device)
-                            one_set_return = self.G(one_seg, l).data.cpu().numpy()
+                            o = o.to(self.device)
+                            t = t.to(self.device)
+                            one_set_return = self.G(one_seg, o, t).data.cpu().numpy()
                             one_set_return = np.squeeze(one_set_return)
                             one_set_return = norm.backward_process(one_set_return, target)
                             convert_result.append(one_set_return)
 
                         convert_con = np.concatenate(convert_result, axis=1)
-                        convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
+                        convert_con = convert_con[:, 0: content['mcep_norm'].shape[1]]
                         contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
-                        decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
                         f0_converted = norm.pitch_conversion(f0, speaker, target)
-                        wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
+                        wav = synthesis_from_mcep(f0_converted, contigu, ap, self.sample_rate, FFTSIZE, SHIFTMS, ALPHA)
 
                         name = f'{speaker}-{target}_iter{i + 1}_{filename}'
                         path = os.path.join(self.sample_dir, name)
@@ -367,17 +370,6 @@ class Solver(object):
         self.G.load_state_dict(torch.load(G_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
-    @staticmethod
-    def pad_coded_sp(coded_sp_norm):
-        f_len = coded_sp_norm.shape[1]
-        if  f_len >= FRAMES: 
-            pad_length = FRAMES-(f_len - (f_len//FRAMES) * FRAMES)
-        elif f_len < FRAMES:
-            pad_length = FRAMES - f_len
-
-        sp_norm_pad = np.hstack((coded_sp_norm, np.zeros((coded_sp_norm.shape[0], pad_length))))
-        return sp_norm_pad 
-
     def convert(self):
         """
             Convertion.    
@@ -390,37 +382,40 @@ class Solver(object):
         targets = self.trg_speaker
        
         for target in targets:
-            print(target)
+            print(f'* Target: {target}')
             assert target in speakers
+            label_o = self.spk_enc.transform([self.src_speaker])[0]
             label_t = self.spk_enc.transform([target])[0]
+            label_o = np.asarray([label_o])
             label_t = np.asarray([label_t])
             
             with torch.no_grad():
                 for filename, content in d.items():
                     f0 = content['f0']
                     ap = content['ap']
-                    sp_norm_pad = self.pad_coded_sp(content['coded_sp_norm'])
+                    mcep_norm_pad = pad_mcep(content['mcep_norm'], FRAMES)
 
                     convert_result = []
-                    for start_idx in range(0, sp_norm_pad.shape[1] - FRAMES + 1, FRAMES):
-                        one_seg = sp_norm_pad[:, start_idx: start_idx + FRAMES]
+                    for start_idx in range(0, mcep_norm_pad.shape[1] - FRAMES + 1, FRAMES):
+                        one_seg = mcep_norm_pad[:, start_idx: start_idx + FRAMES]
                         
                         one_seg = torch.FloatTensor(one_seg).to(self.device)
                         one_seg = one_seg.view(1, 1, one_seg.size(0), one_seg.size(1))
-                        l = torch.FloatTensor(label_t)
+                        o = torch.FloatTensor(label_o)
+                        t = torch.FloatTensor(label_t)
                         one_seg = one_seg.to(self.device)
-                        l = l.to(self.device)
-                        one_set_return = self.G(one_seg, l).data.cpu().numpy()
+                        o = o.to(self.device)
+                        t = t.to(self.device)
+                        one_set_return = self.G(one_seg, o, t).data.cpu().numpy()
                         one_set_return = np.squeeze(one_set_return)
                         one_set_return = norm.backward_process(one_set_return, target)
                         convert_result.append(one_set_return)
 
                     convert_con = np.concatenate(convert_result, axis=1)
-                    convert_con = convert_con[:, 0: content['coded_sp_norm'].shape[1]]
-                    contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)   
-                    decoded_sp = decode_spectral_envelope(contigu, self.sample_rate, fft_size=FFTSIZE)
+                    convert_con = convert_con[:, 0: content['mcep_norm'].shape[1]]
+                    contigu = np.ascontiguousarray(convert_con.T, dtype=np.float64)
                     f0_converted = norm.pitch_conversion(f0, speaker, target)
-                    wav = synthesize(f0_converted, decoded_sp, ap, self.sample_rate)
+                    wav = synthesis_from_mcep(f0_converted, contigu, ap, self.sample_rate, FFTSIZE, SHIFTMS, ALPHA)
 
                     name = f'{speaker}-{target}_iter{self.test_iters}_{filename}'
                     path = os.path.join(self.result_dir, name)

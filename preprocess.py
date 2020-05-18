@@ -1,19 +1,21 @@
 import argparse
+from datetime import datetime
 import glob
 import librosa
 import numpy as np
 import os
-import pyworld as pw
-from utility import *
-from datetime import datetime
+import shutil
 
-FEATURE_DIM = 36
+from utility import GenerateStatistics, Normalizer, speakers, cal_mcep
+
+FEATURE_DIM = 34
 FRAMES = 128
 FFTSIZE = 1024
 SPEAKERS_NUM = len(speakers)
 CHUNK_SIZE = 1
 EPSILON = 1e-10
-MODEL_NAME = 'stargan-vc2'
+SHIFTMS = 5.0
+ALPHA = 0.42
 
 def load_wavs(dataset: str, sr):
     """
@@ -41,7 +43,7 @@ def load_wavs(dataset: str, sr):
             filename = one_file.split('/')[-1].split('.')[0] 
             newkey = f'{filename}'
             wav, _ = librosa.load(one_file, sr=sr, mono=True, dtype=np.float64)
-            y,_ = librosa.effects.trim(wav, top_db=15)
+            y, _ = librosa.effects.trim(wav, top_db=15)
             wav = np.append(y[0], y[1: ] - 0.97 * y[: -1])
 
             resdict[key][newkey] = wav
@@ -61,7 +63,7 @@ def chunks(iterable, size):
 
 def wav_to_mcep_file(dataset: str, sr: int, processed_filepath: str='./data/processed'):
     """
-        Convert wavs to mcep feature using image repr.
+        Convert wavs to MCEPs feature using image representation.
     """
 
     shutil.rmtree(processed_filepath)
@@ -82,14 +84,15 @@ def wav_to_mcep_file(dataset: str, sr: int, processed_filepath: str='./data/proc
                 wav_concated.extend(one)
             wav_concated = np.array(wav_concated)
 
-            f0, ap, sp, coded_sp = cal_mcep(wav_concated, sr=sr, dim=FEATURE_DIM)
+            f0, ap, mcep = cal_mcep(wav_concated, sr, FEATURE_DIM, FFTSIZE, SHIFTMS, ALPHA)
+            
             newname = f'{one_speaker}_{index}'
             file_path_z = os.path.join(processed_filepath, newname)
-            np.savez(file_path_z, f0=f0, coded_sp=coded_sp)
+            np.savez(file_path_z, f0=f0, mcep=mcep)
             print(f'[SAVE]: {file_path_z}')
 
-            for start_idx in range(0, coded_sp.shape[1] - FRAMES + 1, FRAMES):
-                one_audio_seg = coded_sp[:, start_idx : start_idx+FRAMES]
+            for start_idx in range(0, mcep.shape[1] - FRAMES + 1, FRAMES):
+                one_audio_seg = mcep[:, start_idx: start_idx + FRAMES]
 
                 if one_audio_seg.shape[1] == FRAMES:
                     temp_name = f'{newname}_{start_idx}'
@@ -97,24 +100,6 @@ def wav_to_mcep_file(dataset: str, sr: int, processed_filepath: str='./data/proc
                     np.save(filePath, one_audio_seg)
                     print(f'[SAVE]: {filePath}.npy')
             
-def world_features(wav, sr, fft_size, dim):
-    f0, timeaxis = pw.harvest(wav, sr)
-    sp = pw.cheaptrick(wav, f0, timeaxis, sr,fft_size=fft_size)
-    ap = pw.d4c(wav, f0, timeaxis, sr, fft_size=fft_size)
-    coded_sp = pw.code_spectral_envelope(sp, sr, dim)
-
-    return f0, timeaxis, sp, ap, coded_sp
-
-def cal_mcep(wav, sr, dim=FEATURE_DIM, fft_size=FFTSIZE):
-    """
-        Calculate MCEPs given wav singnal.
-    """
-
-    f0, timeaxis, sp, ap, coded_sp = world_features(wav, sr, fft_size, dim)
-    coded_sp = coded_sp.T
-
-    return f0, ap, sp, coded_sp
-
 if __name__ == "__main__":
     start = datetime.now()
     parser = argparse.ArgumentParser(description='Convert the wav waveform to mel-cepstral coefficients(MCCs)\

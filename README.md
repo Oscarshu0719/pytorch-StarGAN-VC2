@@ -154,12 +154,20 @@ dataset:
     e.g. Use dataset VCC2016.
         VCC2016
 
-e.g. Convert from speaker VCC2SM1 to speakers VCC2SM1 and VCC2SM1 at step 100000 using sample rate of VCC2016.
-    python main.py --mode convert --src_speaker "VCC2SM1" --trg_speaker "['VCC2SM1', 'VCC2SM1']" --test_iters 100000 --dataset VCC2016
+e.g. Convert from speaker VCC2SM1 to speakers VCC2SM1 and VCC2SF1 at step 100000 using sample rate of VCC2018.
+    python main.py --mode convert --src_speaker "VCC2SM1" --trg_speaker "['VCC2SM1', 'VCC2SF1']" --test_iters 100000 --dataset VCC2018
     
 Notice:
     Details of other arguments are in `main.py`.
 ```
+
+### Tensorboard
+
+```
+tensorboard --logdir='./outputs/logs/'
+```
+
+Then open `http://localhost:6006/` in browser.
 
 ## References
 

@@ -124,13 +124,14 @@ class ResidualBlock(nn.Module):
                                     kernel_size=kernel_size,
                                     stride=stride,
                                     padding=padding)
-        self.adain = AdaptiveInstanceNormalization(dim_in=dim_out, style_num=style_num)
-        # self.cin = ConditionalInstanceNormalisation(dim_in=dim_out, style_num=style_num)
+        # self.adain = AdaptiveInstanceNormalization(dim_in=dim_out, style_num=style_num)
+        self.cin = ConditionalInstanceNormalisation(dim_in=dim_out, style_num=style_num)
         self.glu = nn.GLU(dim=1)
 
     def forward(self, x, c_):
         x_ = self.conv_layer(x)
-        x_ = self.adain(x_, c_)
+        # x_ = self.adain(x_, c_)
+        x_ = self.cin(x_, c_)
         x_ = self.glu(x_)
 
         return x + x_

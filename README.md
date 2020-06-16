@@ -69,8 +69,8 @@ e.g. Use dataset VCC2016. Train and test four speakers SF1, SF2, TM1, and TM2.
     bash move_data.sh VCC2016 SF1 SF2 TM1 TM2
 ```
 
-1. **Training set**: According to the paper, move direcotories SF1, SF2, TM1, TM2 to `./data/spk`.
-2. **Testing set**: According to the paper, move direcotories SF1, SF2, TM1, TM2 to `./data/spk_test`.
+1. **Training set**: According to the paper, move directories SF1, SF2, TM1, TM2 to `./data/spk`.
+2. **Testing set**: According to the paper, move directories SF1, SF2, TM1, TM2 to `./data/spk_test`.
 
 Directory structure: 
 
@@ -94,7 +94,7 @@ data
 
 ### Preprocess
 
-Extract WORLD features (mcep, f0, ap) from each speech clip.
+Extract WORLD features (MCEPs, F0, AP) from each speech clip.
 
 ```
 python [-W ignore] preprocess.py [--dataset dataset]
